@@ -1,0 +1,90 @@
+name: Avengers Doomsday Monitor (Bhubaneswar)
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check-showtimes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout district-skills
+        uses: actions/checkout@v4
+        with:
+          repository: Sj0605-DataSci/district-skills
+          ref: main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install district-skills
+        run: pip install -e .
+
+      - name: Check showtimes for Avengers: Doomsday in Bhubaneswar
+        id: check
+        run: |
+          OUTPUT=$(district showtimes "Avengers: Doomsday" --near "Bhubaneswar" 2>/dev/null)
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Debug - print output
+        run: |
+          echo "=== SHOWTIMES OUTPUT ==="
+          echo "${{ steps.check.outputs.output }}"
+          echo "========================="
+
+      - name: Send Telegram alert - New cinema/format/tickets
+        if: >
+          contains(fromJson(steps.check.outputs.output), 'PVR Utkal Kanika') ||
+          contains(fromJson(steps.check.outputs.output), 'Cinepolis Nexus Esplanade') ||
+          contains(fromJson(steps.check.outputs.output), '2D') ||
+          contains(fromJson(steps.check.outputs.output), '"available": true')
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MSG="🚨 *Avengers: Doomsday Alert* (Bhubaneswar)"
+
+          if echo "${{ steps.check.outputs.output }}" | grep -qi "PVR Utkal Kanika"; then
+            MSG+=$'\n'"🎬 *PVR Utkal Kanika* now listed!"
+          fi
+          if echo "${{ steps.check.outputs.output }}" | grep -qi "Cinepolis Nexus Esplanade"; then
+            MSG+=$'\n'"🎬 *Cinepolis Nexus Esplanade* listed!"
+          fi
+
+          if echo "${{ steps.check.outputs.output }}" | grep -qi '"format": "2D"'; then
+            MSG+=$'\n'"📽 *2D format* available!"
+          elif echo "${{ steps.check.outputs.output }}" | grep -qi '"format": "IMAX 2D"'; then
+            MSG+=$'\n'"📽 *IMAX 2D* available!"
+          elif echo "${{ steps.check.outputs.output }}" | grep -qi '"format": "Dolby 2D"'; then
+            MSG+=$'\n'"📽 *Dolby 2D* available!"
+          fi
+
+          if echo "${{ steps.check.outputs.output }}" | grep -q '"available": true'; then
+            MSG+=$'\n'"✅ *Tickets ON SALE*!"
+          fi
+
+          MSG+=$'\n\n'"🔗 [View on District](https://www.district.in/movies/bhubaneswar)"
+          MSG+=$'\n'"🕐 Checked: $(date -u +'%Y-%m-%d %H:%M UTC')"
+
+          curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+               -d chat_id="$CHAT_ID" \
+               -d text="$MSG" \
+               -d parse_mode="Markdown" \
+               -d disable_web_page_preview=true
+
+      - name: Log check result (no alert)
+        if: always()
+        run: |
+          echo "Check completed at $(date -u)"
+          if echo "${{ steps.check.outputs.output }}" | grep -q "cinemas"; then
+            echo "Showtimes found for $(echo "${{ steps.check.outputs.output }}" | jq -r '.cinemas | length') cinema(s)"
+          else
+            echo "No showtimes data returned"
+          fi
