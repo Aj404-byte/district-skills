@@ -40,11 +40,7 @@ jobs:
           echo "========================="
 
       - name: Send Telegram alert - New cinema/format/tickets
-        if: >
-          contains(fromJson(steps.check.outputs.output), 'PVR Utkal Kanika') ||
-          contains(fromJson(steps.check.outputs.output), 'Cinepolis Nexus Esplanade') ||
-          contains(fromJson(steps.check.outputs.output), '2D') ||
-          contains(fromJson(steps.check.outputs.output), '"available": true')
+              if: contains(fromJson(steps.check.outputs.output), 'PVR Utkal Kanika') || contains(fromJson(steps.check.outputs.output), 'Cinepolis Nexus Esplanade') || contains(fromJson(steps.check.outputs.output), '2D') || contains(fromJson(steps.check.outputs.output), '"available": true')
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
